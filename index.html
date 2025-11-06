@@ -95,6 +95,13 @@
       background: #1a1a1a;
       border-left-color: #4CAF50;
     }
+
+    .event-item-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     
     .event-count-badge {
       display: inline-block;
@@ -110,6 +117,12 @@
     
     .event-item-grouped {
       border-left-color: #4CAF50;
+    }
+
+    .event-item-expanded .event-raw-toggle {
+      background: #4CAF50;
+      border-color: #4CAF50;
+      color: #0f0f0f;
     }
     
     @keyframes fadeIn {
@@ -141,6 +154,36 @@
       color: #888;
       white-space: pre-wrap;
       word-break: break-all;
+    }
+
+    .event-raw-toggle {
+      margin-left: auto;
+      padding: 2px 8px;
+      background: #2d2d2d;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #e0e0e0;
+      cursor: pointer;
+      font-size: 10px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .event-raw-toggle:hover {
+      background: #3d3d3d;
+      border-color: #555;
+    }
+
+    .event-raw {
+      margin-top: 8px;
+      padding: 8px 12px;
+      border: 1px solid #333;
+      border-radius: 4px;
+      background: #0b0b0b;
+      font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
     
     .filter-input {
@@ -463,7 +506,7 @@
     let isPaused = false;
     let selectedEventTypes = new Set(); // Track which event types are selected
     let events = [];
-    const DEFAULT_EXCLUDED_EVENTS = new Set(['mousemove', 'mouseenter', 'mouseover', 'mouseout', 'mouseleavegst']);
+    const DEFAULT_EXCLUDED_EVENTS = new Set(['mousemove', 'mouseenter', 'mouseover', 'mouseout', 'mouseleave']);
     
     // Track last event for grouping consecutive events
     let lastEventItem = null;
@@ -580,6 +623,305 @@
       
       return details.length > 0 ? details.join(' | ') : 'No additional details';
     }
+
+    function formatHumanTimestamp(timestamp) {
+      const date = new Date(timestamp);
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }) + '.' + date.getMilliseconds().toString().padStart(3, '0');
+    }
+
+    function describeNode(node) {
+      if (!node) return null;
+      if (typeof Window !== 'undefined' && node instanceof Window) return 'window';
+      if (node === document) return 'document';
+      if (typeof Node !== 'undefined' && node instanceof Node) {
+        switch (node.nodeType) {
+          case Node.TEXT_NODE:
+            return '#text';
+          case Node.COMMENT_NODE:
+            return '#comment';
+          case Node.DOCUMENT_NODE:
+            return 'document';
+          case Node.ELEMENT_NODE:
+          default: {
+            const element = node;
+            const tag = element.tagName ? element.tagName.toLowerCase() : 'element';
+            const id = element.id ? `#${element.id}` : '';
+            const className = element.className && typeof element.className === 'string'
+              ? `.${element.className.split(' ').filter(Boolean)[0] || ''}`
+              : '';
+            return `${tag}${id}${className}`;
+          }
+        }
+      }
+      return Object.prototype.toString.call(node);
+    }
+
+    function serializeTouchList(touchList) {
+      if (!touchList) return undefined;
+      try {
+        return Array.from(touchList).map(touch => ({
+          identifier: touch.identifier,
+          clientX: touch.clientX,
+          clientY: touch.clientY,
+          pageX: touch.pageX,
+          pageY: touch.pageY,
+          screenX: touch.screenX,
+          screenY: touch.screenY,
+          radiusX: touch.radiusX,
+          radiusY: touch.radiusY,
+          rotationAngle: touch.rotationAngle,
+          force: touch.force,
+          target: describeNode(touch.target)
+        }));
+      } catch (err) {
+        return `[Unserializable TouchList: ${err.message}]`;
+      }
+    }
+
+    function assignIfDefined(target, key, value) {
+      if (value !== undefined) {
+        target[key] = value;
+      }
+    }
+
+    function toSerializable(value, depth = 0, seen = new WeakSet()) {
+      if (value === null || typeof value === 'undefined') return value;
+      if (typeof value === 'function') return '[Function]';
+      if (typeof value === 'symbol') return value.toString();
+
+      if (typeof Window !== 'undefined' && value instanceof Window) return 'window';
+      if (value === document) return 'document';
+      if (typeof Node !== 'undefined' && value instanceof Node) {
+        return describeNode(value);
+      }
+
+      if (typeof value !== 'object') return value;
+
+      if (seen.has(value)) return '[Circular]';
+      if (depth >= 2) {
+        if (Array.isArray(value)) return `[Array(${value.length})]`;
+        if (ArrayBuffer.isView && ArrayBuffer.isView(value)) return `[TypedArray(${value.length})]`;
+        return '[Object]';
+      }
+
+      seen.add(value);
+
+      if (Array.isArray(value)) {
+        return value.slice(0, 20).map(item => {
+          try {
+            return toSerializable(item, depth + 1, seen);
+          } catch (err) {
+            return `[Unserializable: ${err.message}]`;
+          }
+        });
+      }
+
+      if (ArrayBuffer.isView && ArrayBuffer.isView(value)) {
+        return Array.from(value).slice(0, 20);
+      }
+
+      const result = {};
+      const keys = Object.keys(value).slice(0, 30);
+      keys.forEach(key => {
+        try {
+          result[key] = toSerializable(value[key], depth + 1, seen);
+        } catch (err) {
+          result[key] = `[Unserializable: ${err.message}]`;
+        }
+      });
+
+      return result;
+    }
+
+    function serializeEvent(event) {
+      const snapshot = {
+        type: event.type,
+        timeStamp: event.timeStamp,
+        isTrusted: event.isTrusted,
+        eventPhase: event.eventPhase,
+        bubbles: event.bubbles,
+        cancelable: event.cancelable,
+        composed: event.composed,
+        defaultPrevented: event.defaultPrevented,
+        target: describeNode(event.target),
+        currentTarget: describeNode(event.currentTarget),
+        relatedTarget: describeNode(event.relatedTarget),
+        modifierKeys: {
+          altKey: event.altKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          shiftKey: event.shiftKey
+        },
+        activeModifiers: { ...activeModifiers }
+      };
+
+      assignIfDefined(snapshot, 'detail', toSerializable(event.detail));
+      assignIfDefined(snapshot, 'which', event.which);
+      assignIfDefined(snapshot, 'button', event.button);
+      assignIfDefined(snapshot, 'buttons', event.buttons);
+      assignIfDefined(snapshot, 'clientX', event.clientX);
+      assignIfDefined(snapshot, 'clientY', event.clientY);
+      assignIfDefined(snapshot, 'pageX', event.pageX);
+      assignIfDefined(snapshot, 'pageY', event.pageY);
+      assignIfDefined(snapshot, 'screenX', event.screenX);
+      assignIfDefined(snapshot, 'screenY', event.screenY);
+      assignIfDefined(snapshot, 'offsetX', event.offsetX);
+      assignIfDefined(snapshot, 'offsetY', event.offsetY);
+      assignIfDefined(snapshot, 'movementX', event.movementX);
+      assignIfDefined(snapshot, 'movementY', event.movementY);
+      assignIfDefined(snapshot, 'key', event.key);
+      assignIfDefined(snapshot, 'code', event.code);
+      assignIfDefined(snapshot, 'keyCode', event.keyCode);
+      assignIfDefined(snapshot, 'charCode', event.charCode);
+      assignIfDefined(snapshot, 'location', event.location);
+      assignIfDefined(snapshot, 'repeat', event.repeat);
+      assignIfDefined(snapshot, 'propertyName', event.propertyName);
+      assignIfDefined(snapshot, 'propertyNamespace', event.propertyNamespace);
+      assignIfDefined(snapshot, 'state', toSerializable(event.state));
+      assignIfDefined(snapshot, 'pointerId', event.pointerId);
+      assignIfDefined(snapshot, 'pointerType', event.pointerType);
+      assignIfDefined(snapshot, 'width', event.width);
+      assignIfDefined(snapshot, 'height', event.height);
+      assignIfDefined(snapshot, 'pressure', event.pressure);
+      assignIfDefined(snapshot, 'tiltX', event.tiltX);
+      assignIfDefined(snapshot, 'tiltY', event.tiltY);
+      assignIfDefined(snapshot, 'twist', event.twist);
+      assignIfDefined(snapshot, 'tangentialPressure', event.tangentialPressure);
+      assignIfDefined(snapshot, 'deltaX', event.deltaX);
+      assignIfDefined(snapshot, 'deltaY', event.deltaY);
+      assignIfDefined(snapshot, 'deltaZ', event.deltaZ);
+      assignIfDefined(snapshot, 'deltaMode', event.deltaMode);
+      assignIfDefined(snapshot, 'data', toSerializable(event.data));
+      assignIfDefined(snapshot, 'inputType', event.inputType);
+      assignIfDefined(snapshot, 'isComposing', event.isComposing);
+      assignIfDefined(snapshot, 'elapsedTime', event.elapsedTime);
+      assignIfDefined(snapshot, 'animationName', event.animationName);
+      assignIfDefined(snapshot, 'pseudoElement', event.pseudoElement);
+
+      const touches = serializeTouchList(event.touches);
+      if (touches) snapshot.touches = touches;
+      const changedTouches = serializeTouchList(event.changedTouches);
+      if (changedTouches) snapshot.changedTouches = changedTouches;
+      const targetTouches = serializeTouchList(event.targetTouches);
+      if (targetTouches) snapshot.targetTouches = targetTouches;
+
+      if (typeof event.getModifierState === 'function') {
+        try {
+          snapshot.modifierState = {
+            Alt: event.getModifierState('Alt'),
+            AltGraph: event.getModifierState('AltGraph'),
+            CapsLock: event.getModifierState('CapsLock'),
+            Control: event.getModifierState('Control'),
+            Meta: event.getModifierState('Meta'),
+            NumLock: event.getModifierState('NumLock'),
+            ScrollLock: event.getModifierState('ScrollLock'),
+            Shift: event.getModifierState('Shift')
+          };
+        } catch (err) {
+          snapshot.modifierStateError = err.message;
+        }
+      }
+
+      const enumerableProps = {};
+      Object.keys(event).forEach(key => {
+        if (key in snapshot) return;
+        try {
+          enumerableProps[key] = toSerializable(event[key]);
+        } catch (err) {
+          enumerableProps[key] = `[Unserializable: ${err.message}]`;
+        }
+      });
+      if (Object.keys(enumerableProps).length > 0) {
+        snapshot.enumerableProperties = enumerableProps;
+      }
+
+      return snapshot;
+    }
+
+    function formatRawEventDetails(eventData) {
+      try {
+        const snapshot = serializeEvent(eventData.event);
+        snapshot.capturedAt = formatHumanTimestamp(eventData.timestamp);
+        snapshot.capturedEpoch = eventData.timestamp;
+        snapshot.eventId = eventData.id;
+        return JSON.stringify(snapshot, null, 2);
+      } catch (err) {
+        return `Unable to serialize event: ${err.message}`;
+      }
+    }
+
+    function createEventItemElement(eventData) {
+      const eventItem = document.createElement('div');
+      eventItem.className = 'event-item';
+
+      const header = document.createElement('div');
+      header.className = 'event-item-header';
+
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'event-time';
+      timeSpan.textContent = `[${formatHumanTimestamp(eventData.timestamp)}]`;
+
+      const typeSpan = document.createElement('span');
+      typeSpan.className = 'event-type';
+      typeSpan.textContent = eventData.type;
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'event-raw-toggle';
+      toggleBtn.type = 'button';
+      toggleBtn.textContent = 'Show raw';
+      toggleBtn.setAttribute('aria-expanded', 'false');
+
+      header.appendChild(timeSpan);
+      header.appendChild(typeSpan);
+      header.appendChild(toggleBtn);
+
+      const detailsDiv = document.createElement('div');
+      detailsDiv.className = 'event-details';
+      detailsDiv.innerHTML = formatEventDetails(eventData.event);
+
+      const rawWrapper = document.createElement('div');
+      rawWrapper.className = 'event-raw';
+      rawWrapper.hidden = true;
+
+      const rawPre = document.createElement('pre');
+      rawPre.textContent = formatRawEventDetails(eventData);
+      rawWrapper.appendChild(rawPre);
+
+      toggleBtn.addEventListener('click', () => {
+        const willShow = rawWrapper.hidden;
+        rawWrapper.hidden = !willShow;
+        toggleBtn.textContent = willShow ? 'Hide raw' : 'Show raw';
+        toggleBtn.setAttribute('aria-expanded', String(willShow));
+        eventItem.classList.toggle('event-item-expanded', willShow);
+      });
+
+      eventItem.appendChild(header);
+      eventItem.appendChild(detailsDiv);
+      eventItem.appendChild(rawWrapper);
+
+      eventItem.__rawPre = rawPre;
+
+      return eventItem;
+    }
+
+    function updateEventItemElement(eventItem, eventData) {
+      const timeSpan = eventItem.querySelector('.event-time');
+      if (timeSpan) timeSpan.textContent = `[${formatHumanTimestamp(eventData.timestamp)}]`;
+
+      const detailsDiv = eventItem.querySelector('.event-details');
+      if (detailsDiv) detailsDiv.innerHTML = formatEventDetails(eventData.event);
+
+      if (eventItem.__rawPre) {
+        eventItem.__rawPre.textContent = formatRawEventDetails(eventData);
+      }
+    }
     
     function addEvent(event) {
       if (isPaused) return;
@@ -626,15 +968,7 @@
       if (isSameType) {
         // Update the existing event item with new count and details
         consecutiveCount++;
-        const date = new Date(eventData.timestamp);
-        const humanTime = date.toLocaleString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false
-        }) + '.' + date.getMilliseconds().toString().padStart(3, '0');
+        updateEventItemElement(lastEventItem, eventData);
         
         // Find and update the count badge
         let countBadge = lastEventItem.querySelector('.event-count-badge');
@@ -649,41 +983,13 @@
           lastEventItem.classList.add('event-item-grouped');
         }
         countBadge.textContent = `x${consecutiveCount + 1}`;
-        
-        // Update timestamp and details to show the most recent event
-        const timeSpan = lastEventItem.querySelector('.event-time');
-        if (timeSpan) {
-          timeSpan.textContent = `[${humanTime}]`;
-        }
-        const detailsDiv = lastEventItem.querySelector('.event-details');
-        if (detailsDiv) {
-          detailsDiv.innerHTML = formatEventDetails(event);
-        }
       } else {
         // Create a new event item
         consecutiveCount = 0;
         lastEventType = event.type;
-        
-        const eventItem = document.createElement('div');
-        eventItem.className = 'event-item';
-        
-        // Format human-readable timestamp
-        const date = new Date(eventData.timestamp);
-        const humanTime = date.toLocaleString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false
-        }) + '.' + date.getMilliseconds().toString().padStart(3, '0');
-        
-        eventItem.innerHTML = `
-          <span class="event-time">[${humanTime}]</span>
-          <span class="event-type">${event.type}</span>
-          <div class="event-details">${formatEventDetails(event)}</div>
-        `;
-        
+
+        const eventItem = createEventItemElement(eventData);
+
         // Add at the top of the log
         const firstChild = eventLog.firstChild;
         if (firstChild) {
@@ -731,7 +1037,6 @@
     }
     
     function applyFilter() {
-      const logContent = eventLog.innerHTML;
       eventLog.innerHTML = '';
       filteredCount = 0;
       
@@ -757,71 +1062,34 @@
       
       // Group consecutive events of the same type
       let currentGroup = null;
-      let groupCount = 0;
       
-      eventsToShow.forEach((eventData, index) => {
+      eventsToShow.forEach((eventData) => {
         const isSameAsPrevious = currentGroup !== null && 
                                   currentGroup.type === eventData.type;
         
         if (isSameAsPrevious) {
-          // Add to existing group
-          groupCount++;
-          // Update the group's timestamp and details to the most recent event
-          const timeSpan = currentGroup.item.querySelector('.event-time');
-          const detailsDiv = currentGroup.item.querySelector('.event-details');
-          const countBadge = currentGroup.item.querySelector('.event-count-badge');
-          
-          const date = new Date(eventData.timestamp);
-          const humanTime = date.toLocaleString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-          }) + '.' + date.getMilliseconds().toString().padStart(3, '0');
-          
-          if (timeSpan) timeSpan.textContent = `[${humanTime}]`;
-          if (detailsDiv) detailsDiv.innerHTML = formatEventDetails(eventData.event);
-          if (countBadge) {
-            countBadge.textContent = `x${groupCount + 1}`;
-          } else {
-            // Create count badge if it doesn't exist
-            const badge = document.createElement('span');
-            badge.className = 'event-count-badge';
-            badge.textContent = `x${groupCount + 1}`;
+          currentGroup.count += 1;
+          updateEventItemElement(currentGroup.item, eventData);
+
+          let countBadge = currentGroup.item.querySelector('.event-count-badge');
+          if (!countBadge) {
+            countBadge = document.createElement('span');
+            countBadge.className = 'event-count-badge';
             const eventTypeSpan = currentGroup.item.querySelector('.event-type');
             if (eventTypeSpan) {
-              eventTypeSpan.parentNode.insertBefore(badge, eventTypeSpan.nextSibling);
+              eventTypeSpan.parentNode.insertBefore(countBadge, eventTypeSpan.nextSibling);
             }
             currentGroup.item.classList.add('event-item-grouped');
           }
+          countBadge.textContent = `x${currentGroup.count + 1}`;
         } else {
-          // Start a new group
-          groupCount = 0;
-          const eventItem = document.createElement('div');
-          eventItem.className = 'event-item';
-          
-          const date = new Date(eventData.timestamp);
-          const humanTime = date.toLocaleString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-          }) + '.' + date.getMilliseconds().toString().padStart(3, '0');
-          
-          eventItem.innerHTML = `
-            <span class="event-time">[${humanTime}]</span>
-            <span class="event-type">${eventData.type}</span>
-            <div class="event-details">${formatEventDetails(eventData.event)}</div>
-          `;
+          const eventItem = createEventItemElement(eventData);
           eventLog.appendChild(eventItem);
           
           currentGroup = {
             type: eventData.type,
-            item: eventItem
+            item: eventItem,
+            count: 0
           };
         }
       });
