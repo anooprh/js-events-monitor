@@ -463,6 +463,7 @@
     let isPaused = false;
     let selectedEventTypes = new Set(); // Track which event types are selected
     let events = [];
+    const DEFAULT_EXCLUDED_EVENTS = new Set(['mousemove', 'mouseenter', 'mouseover', 'mouseout', 'mouseleavegst']);
     
     // Track last event for grouping consecutive events
     let lastEventItem = null;
@@ -976,12 +977,14 @@
           checkbox.type = 'checkbox';
           checkbox.id = `filter-${eventType}`;
           checkbox.value = eventType;
-          checkbox.checked = true; // All selected by default
+          const eventKey = eventType.toLowerCase();
+          const isExcluded = DEFAULT_EXCLUDED_EVENTS.has(eventKey);
+          checkbox.checked = !isExcluded;
           checkbox.addEventListener('change', (e) => {
             if (e.target.checked) {
-              selectedEventTypes.add(eventType.toLowerCase());
+              selectedEventTypes.add(eventKey);
             } else {
-              selectedEventTypes.delete(eventType.toLowerCase());
+              selectedEventTypes.delete(eventKey);
             }
             applyFilter();
           });
@@ -995,7 +998,9 @@
           content.appendChild(item);
           
           // Add to selected set by default
-          selectedEventTypes.add(eventType.toLowerCase());
+          if (!isExcluded) {
+            selectedEventTypes.add(eventKey);
+          }
         });
         
         sectionEl.appendChild(header);
