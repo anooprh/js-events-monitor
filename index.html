@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JavaScript Events Monitor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      padding: 20px;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    h1 {
+      color: #4CAF50;
+      margin-bottom: 10px;
+      font-size: 24px;
+    }
+    
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    
+    button {
+      padding: 8px 16px;
+      background: #2d2d2d;
+      border: 1px solid #444;
+      border-radius: 6px;
+      color: #e0e0e0;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    
+    button:hover {
+      background: #3d3d3d;
+    }
+    
+    button.active {
+      background: #4CAF50;
+      border-color: #4CAF50;
+    }
+    
+    .stats {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: #aaa;
+    }
+    
+    .stats span {
+      padding: 4px 8px;
+      background: #2d2d2d;
+      border-radius: 4px;
+    }
+    
+    .event-log {
+      flex: 1;
+      overflow-y: auto;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 15px;
+      font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    
+    .event-item {
+      margin-bottom: 8px;
+      padding: 8px;
+      border-left: 3px solid #333;
+      background: #151515;
+      border-radius: 4px;
+      animation: fadeIn 0.2s;
+      position: relative;
+    }
+    
+    .event-item:hover {
+      background: #1a1a1a;
+      border-left-color: #4CAF50;
+    }
+    
+    .event-count-badge {
+      display: inline-block;
+      background: #4CAF50;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    
+    .event-item-grouped {
+      border-left-color: #4CAF50;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(-10px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    
+    .event-time {
+      color: #888;
+      font-size: 10px;
+      margin-right: 8px;
+    }
+    
+    .event-type {
+      color: #4CAF50;
+      font-weight: bold;
+      margin-right: 8px;
+    }
+    
+    .event-details {
+      color: #bbb;
+      margin-top: 4px;
+      padding-left: 20px;
+      font-size: 11px;
+    }
+    
+    .event-details pre {
+      margin: 4px 0;
+      color: #888;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    
+    .filter-input {
+      padding: 8px;
+      background: #2d2d2d;
+      border: 1px solid #444;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 14px;
+      width: 200px;
+    }
+    
+    .filter-input:focus {
+      outline: none;
+      border-color: #4CAF50;
+    }
+    
+    .scrollbar {
+      scrollbar-width: thin;
+      scrollbar-color: #444 #0f0f0f;
+    }
+    
+    .scrollbar::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .scrollbar::-webkit-scrollbar-track {
+      background: #0f0f0f;
+    }
+    
+    .scrollbar::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 4px;
+    }
+    
+    .scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+    
+    /* Filter panel */
+    .filter-panel {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 0;
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      max-height: 500px;
+      overflow: hidden;
+    }
+    
+    .filter-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+      background: #1a1a1a;
+      gap: 12px;
+    }
+    
+    .filter-panel-header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      cursor: pointer;
+    }
+    
+    .filter-panel-header h3 {
+      margin: 0;
+      font-size: 16px;
+      color: #4CAF50;
+    }
+    
+    .filter-panel-toggle {
+      font-size: 12px;
+      color: #888;
+      transition: color 0.2s;
+    }
+    
+    .filter-actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .filter-action-btn {
+      padding: 6px 12px;
+      background: #2d2d2d;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #e0e0e0;
+      cursor: pointer;
+      font-size: 12px;
+      transition: background 0.2s;
+    }
+    
+    .filter-action-btn:hover {
+      background: #3d3d3d;
+    }
+    
+    .filter-content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 16px;
+      min-height: 0;
+    }
+    
+    .filter-content.scrollbar {
+      scrollbar-width: thin;
+      scrollbar-color: #444 #0f0f0f;
+    }
+    
+    .filter-content.scrollbar::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .filter-content.scrollbar::-webkit-scrollbar-track {
+      background: #0f0f0f;
+    }
+    
+    .filter-content.scrollbar::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 4px;
+    }
+    
+    .filter-content.scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+    
+    /* Resize handle */
+    .filter-resize-handle {
+      height: 4px;
+      background: #333;
+      cursor: ns-resize;
+      flex-shrink: 0;
+      position: relative;
+      transition: background 0.2s;
+    }
+    
+    .filter-resize-handle:hover {
+      background: #4CAF50;
+    }
+    
+    .filter-resize-handle::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 40px;
+      height: 2px;
+      background: #555;
+      border-radius: 2px;
+    }
+    
+    .filter-resize-handle:hover::after {
+      background: #4CAF50;
+    }
+    
+    .filter-panel.collapsed .filter-content {
+      display: none;
+    }
+    
+    .filter-panel.collapsed .filter-resize-handle {
+      display: none;
+    }
+    
+    .filter-sections {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .filter-section {
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #151515;
+      overflow: visible;
+    }
+    
+    .filter-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: #1f1f1f;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s;
+      gap: 12px;
+    }
+    
+    .filter-section-header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+    }
+    
+    .filter-section-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    
+    .filter-section-action-btn {
+      padding: 4px 8px;
+      background: #2d2d2d;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #e0e0e0;
+      cursor: pointer;
+      font-size: 10px;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    
+    .filter-section-action-btn:hover {
+      background: #3d3d3d;
+    }
+    
+    .filter-section-header h4 {
+      margin: 0;
+      flex: 0 0 auto;
+    }
+    
+    .filter-section-header:hover {
+      background: #252525;
+    }
+    
+    
+    .filter-section-toggle {
+      font-size: 12px;
+      color: #888;
+      transition: color 0.2s;
+    }
+    
+    .filter-section-content {
+      display: none;
+      padding: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 8px;
+    }
+    
+    .filter-section.expanded .filter-section-content {
+      display: grid;
+    }
+    
+    .filter-checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+    
+    .filter-checkbox-item:hover {
+      background: #252525;
+    }
+    
+    .filter-checkbox-item input[type="checkbox"] {
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+      accent-color: #4CAF50;
+    }
+    
+    .filter-checkbox-item label {
+      cursor: pointer;
+      font-size: 12px;
+      color: #e0e0e0;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>JavaScript Events Monitor</h1>
+  
+  <div class="controls">
+    <button id="clearBtn">Clear Log</button>
+    <button id="pauseBtn">Pause</button>
+    <button id="exportBtn">Export Log</button>
+  </div>
+  
+  <div class="filter-panel" id="filterPanel">
+    <div class="filter-panel-header" id="filterPanelHeader">
+      <div class="filter-panel-header-left">
+        <h3>Select Events to Include</h3>
+        <span class="filter-panel-toggle" id="filterPanelToggle">▼</span>
+      </div>
+      <div class="filter-actions">
+        <button id="selectAllBtn" class="filter-action-btn">Enable All</button>
+        <button id="selectNoneBtn" class="filter-action-btn">Disable All</button>
+      </div>
+    </div>
+    <div class="filter-content scrollbar" id="filterContent">
+      <div class="filter-sections" id="filterSections">
+        <!-- Filter sections will be generated here -->
+      </div>
+    </div>
+    <div class="filter-resize-handle" id="filterResizeHandle"></div>
+  </div>
+  
+  <div class="stats">
+    <span>Total Events: <strong id="totalCount">0</strong></span>
+    <span>Filtered: <strong id="filteredCount">0</strong></span>
+    <span>Paused: <strong id="pausedStatus">No</strong></span>
+  </div>
+  
+  <div class="event-log scrollbar" id="eventLog"></div>
+
+  <script>
+    let eventCount = 0;
+    let filteredCount = 0;
+    let isPaused = false;
+    let selectedEventTypes = new Set(); // Track which event types are selected
+    let events = [];
+    
+    // Track last event for grouping consecutive events
+    let lastEventItem = null;
+    let lastEventType = null;
+    let consecutiveCount = 0;
+    
+    // Track which modifier keys are currently pressed and their sides
+    let activeModifiers = {
+      shiftLeft: false,
+      shiftRight: false,
+      ctrlLeft: false,
+      ctrlRight: false,
+      altLeft: false,
+      altRight: false,
+      metaLeft: false,
+      metaRight: false
+    };
+    
+    const eventLog = document.getElementById('eventLog');
+    const clearBtn = document.getElementById('clearBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const filterPanel = document.getElementById('filterPanel');
+    const filterPanelHeader = document.getElementById('filterPanelHeader');
+    const filterPanelHeaderLeft = filterPanelHeader.querySelector('.filter-panel-header-left');
+    const filterPanelToggle = document.getElementById('filterPanelToggle');
+    const filterContent = document.getElementById('filterContent');
+    const filterSections = document.getElementById('filterSections');
+    const filterResizeHandle = document.getElementById('filterResizeHandle');
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    const selectNoneBtn = document.getElementById('selectNoneBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const totalCountEl = document.getElementById('totalCount');
+    const filteredCountEl = document.getElementById('filteredCount');
+    const pausedStatusEl = document.getElementById('pausedStatus');
+    
+    function formatTime() {
+      const now = new Date();
+      return now.toLocaleTimeString() + '.' + now.getMilliseconds().toString().padStart(3, '0');
+    }
+    
+    function formatEventDetails(event) {
+      let details = [];
+      
+      if (event.type) details.push(`Type: ${event.type}`);
+      if (event.target) {
+        const tag = event.target.tagName || 'Unknown';
+        const id = event.target.id ? `#${event.target.id}` : '';
+        const className = event.target.className ? `.${event.target.className.split(' ')[0]}` : '';
+        details.push(`Target: ${tag}${id}${className}`);
+      }
+      if (event.key) {
+        let keyInfo = `Key: ${event.key}`;
+        if (event.code) {
+          keyInfo += ` (code: ${event.code})`;
+          // Show left/right distinction for modifier keys
+          if (event.code.includes('Left')) keyInfo += ' [Left]';
+          else if (event.code.includes('Right')) keyInfo += ' [Right]';
+        } else if (event.keyCode) {
+          keyInfo += ` (keyCode: ${event.keyCode})`;
+        }
+        details.push(keyInfo);
+      }
+      if (event.button !== undefined) details.push(`Button: ${event.button}`);
+      if (event.clientX !== undefined) details.push(`Position: (${event.clientX}, ${event.clientY})`);
+      if (event.deltaX !== undefined || event.deltaY !== undefined) {
+        details.push(`Delta: (${event.deltaX || 0}, ${event.deltaY || 0})`);
+      }
+      if (event.touches) details.push(`Touches: ${event.touches.length}`);
+      // Show which modifier keys are pressed with left/right distinction
+      if (event.shiftKey) {
+        let shiftInfo = 'Shift';
+        if (activeModifiers.shiftLeft && activeModifiers.shiftRight) {
+          shiftInfo += ' [Both]';
+        } else if (activeModifiers.shiftLeft) {
+          shiftInfo += ' [Left]';
+        } else if (activeModifiers.shiftRight) {
+          shiftInfo += ' [Right]';
+        }
+        details.push(shiftInfo);
+      }
+      if (event.ctrlKey) {
+        let ctrlInfo = 'Ctrl';
+        if (activeModifiers.ctrlLeft && activeModifiers.ctrlRight) {
+          ctrlInfo += ' [Both]';
+        } else if (activeModifiers.ctrlLeft) {
+          ctrlInfo += ' [Left]';
+        } else if (activeModifiers.ctrlRight) {
+          ctrlInfo += ' [Right]';
+        }
+        details.push(ctrlInfo);
+      }
+      if (event.altKey) {
+        let altInfo = 'Alt';
+        if (activeModifiers.altLeft && activeModifiers.altRight) {
+          altInfo += ' [Both]';
+        } else if (activeModifiers.altLeft) {
+          altInfo += ' [Left]';
+        } else if (activeModifiers.altRight) {
+          altInfo += ' [Right]';
+        }
+        details.push(altInfo);
+      }
+      if (event.metaKey) {
+        let metaInfo = 'Meta';
+        if (activeModifiers.metaLeft && activeModifiers.metaRight) {
+          metaInfo += ' [Both]';
+        } else if (activeModifiers.metaLeft) {
+          metaInfo += ' [Left]';
+        } else if (activeModifiers.metaRight) {
+          metaInfo += ' [Right]';
+        }
+        details.push(metaInfo);
+      }
+      
+      return details.length > 0 ? details.join(' | ') : 'No additional details';
+    }
+    
+    function addEvent(event) {
+      if (isPaused) return;
+      
+      // Track modifier key states for left/right distinction
+      if (event.type === 'keydown' || event.type === 'keyup') {
+        const isPressed = event.type === 'keydown';
+        if (event.code === 'ShiftLeft') activeModifiers.shiftLeft = isPressed;
+        else if (event.code === 'ShiftRight') activeModifiers.shiftRight = isPressed;
+        else if (event.code === 'ControlLeft') activeModifiers.ctrlLeft = isPressed;
+        else if (event.code === 'ControlRight') activeModifiers.ctrlRight = isPressed;
+        else if (event.code === 'AltLeft') activeModifiers.altLeft = isPressed;
+        else if (event.code === 'AltRight') activeModifiers.altRight = isPressed;
+        else if (event.code === 'MetaLeft') activeModifiers.metaLeft = isPressed;
+        else if (event.code === 'MetaRight') activeModifiers.metaRight = isPressed;
+      }
+      
+      eventCount++;
+      const eventData = {
+        id: eventCount,
+        time: formatTime(),
+        type: event.type,
+        event: event,
+        timestamp: Date.now()
+      };
+      
+      events.push(eventData);
+      
+      // Apply checkbox filter (only show selected event types)
+      // If no types are selected, show nothing. If types are selected, only show those.
+      if (selectedEventTypes.size === 0 || !selectedEventTypes.has(event.type.toLowerCase())) {
+        filteredCount++;
+        // Reset grouping when event is filtered out
+        lastEventItem = null;
+        lastEventType = null;
+        consecutiveCount = 0;
+        updateStats();
+        return;
+      }
+      
+      // Check if this is the same event type as the last one
+      const isSameType = lastEventType === event.type && lastEventItem !== null;
+      
+      if (isSameType) {
+        // Update the existing event item with new count and details
+        consecutiveCount++;
+        const date = new Date(eventData.timestamp);
+        const humanTime = date.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        }) + '.' + date.getMilliseconds().toString().padStart(3, '0');
+        
+        // Find and update the count badge
+        let countBadge = lastEventItem.querySelector('.event-count-badge');
+        if (!countBadge) {
+          // Create count badge if it doesn't exist
+          countBadge = document.createElement('span');
+          countBadge.className = 'event-count-badge';
+          const eventTypeSpan = lastEventItem.querySelector('.event-type');
+          if (eventTypeSpan) {
+            eventTypeSpan.parentNode.insertBefore(countBadge, eventTypeSpan.nextSibling);
+          }
+          lastEventItem.classList.add('event-item-grouped');
+        }
+        countBadge.textContent = `x${consecutiveCount + 1}`;
+        
+        // Update timestamp and details to show the most recent event
+        const timeSpan = lastEventItem.querySelector('.event-time');
+        if (timeSpan) {
+          timeSpan.textContent = `[${humanTime}]`;
+        }
+        const detailsDiv = lastEventItem.querySelector('.event-details');
+        if (detailsDiv) {
+          detailsDiv.innerHTML = formatEventDetails(event);
+        }
+      } else {
+        // Create a new event item
+        consecutiveCount = 0;
+        lastEventType = event.type;
+        
+        const eventItem = document.createElement('div');
+        eventItem.className = 'event-item';
+        
+        // Format human-readable timestamp
+        const date = new Date(eventData.timestamp);
+        const humanTime = date.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        }) + '.' + date.getMilliseconds().toString().padStart(3, '0');
+        
+        eventItem.innerHTML = `
+          <span class="event-time">[${humanTime}]</span>
+          <span class="event-type">${event.type}</span>
+          <div class="event-details">${formatEventDetails(event)}</div>
+        `;
+        
+        // Add at the top of the log
+        const firstChild = eventLog.firstChild;
+        if (firstChild) {
+          eventLog.insertBefore(eventItem, firstChild);
+        } else {
+          eventLog.appendChild(eventItem);
+        }
+        
+        lastEventItem = eventItem;
+      }
+      
+      // Keep scroll position at top when new events are added
+      // Only auto-scroll to top if user is already at the top (within 10px)
+      const isNearTop = eventLog.scrollTop < 10;
+      if (isNearTop) {
+        eventLog.scrollTop = 0;
+      }
+      
+      updateStats();
+    }
+    
+    function updateStats() {
+      totalCountEl.textContent = eventCount;
+      filteredCountEl.textContent = filteredCount;
+      pausedStatusEl.textContent = isPaused ? 'Yes' : 'No';
+    }
+    
+    function clearLog() {
+      eventLog.innerHTML = '';
+      events = [];
+      eventCount = 0;
+      filteredCount = 0;
+      // Reset grouping
+      lastEventItem = null;
+      lastEventType = null;
+      consecutiveCount = 0;
+      updateStats();
+    }
+    
+    function togglePause() {
+      isPaused = !isPaused;
+      pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
+      pauseBtn.classList.toggle('active', isPaused);
+      updateStats();
+    }
+    
+    function applyFilter() {
+      const logContent = eventLog.innerHTML;
+      eventLog.innerHTML = '';
+      filteredCount = 0;
+      
+      // Reset grouping when applying filter
+      lastEventItem = null;
+      lastEventType = null;
+      consecutiveCount = 0;
+      
+      // Process events in reverse order (newest first) to maintain top-to-bottom display
+      const eventsToShow = [];
+      for (let i = events.length - 1; i >= 0; i--) {
+        const eventData = events[i];
+        
+        // Apply checkbox filter (only show selected event types)
+        // If no types are selected, show nothing. If types are selected, only show those.
+        if (selectedEventTypes.size === 0 || !selectedEventTypes.has(eventData.type.toLowerCase())) {
+          filteredCount++;
+          continue;
+        }
+        
+        eventsToShow.push(eventData);
+      }
+      
+      // Group consecutive events of the same type
+      let currentGroup = null;
+      let groupCount = 0;
+      
+      eventsToShow.forEach((eventData, index) => {
+        const isSameAsPrevious = currentGroup !== null && 
+                                  currentGroup.type === eventData.type;
+        
+        if (isSameAsPrevious) {
+          // Add to existing group
+          groupCount++;
+          // Update the group's timestamp and details to the most recent event
+          const timeSpan = currentGroup.item.querySelector('.event-time');
+          const detailsDiv = currentGroup.item.querySelector('.event-details');
+          const countBadge = currentGroup.item.querySelector('.event-count-badge');
+          
+          const date = new Date(eventData.timestamp);
+          const humanTime = date.toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          }) + '.' + date.getMilliseconds().toString().padStart(3, '0');
+          
+          if (timeSpan) timeSpan.textContent = `[${humanTime}]`;
+          if (detailsDiv) detailsDiv.innerHTML = formatEventDetails(eventData.event);
+          if (countBadge) {
+            countBadge.textContent = `x${groupCount + 1}`;
+          } else {
+            // Create count badge if it doesn't exist
+            const badge = document.createElement('span');
+            badge.className = 'event-count-badge';
+            badge.textContent = `x${groupCount + 1}`;
+            const eventTypeSpan = currentGroup.item.querySelector('.event-type');
+            if (eventTypeSpan) {
+              eventTypeSpan.parentNode.insertBefore(badge, eventTypeSpan.nextSibling);
+            }
+            currentGroup.item.classList.add('event-item-grouped');
+          }
+        } else {
+          // Start a new group
+          groupCount = 0;
+          const eventItem = document.createElement('div');
+          eventItem.className = 'event-item';
+          
+          const date = new Date(eventData.timestamp);
+          const humanTime = date.toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          }) + '.' + date.getMilliseconds().toString().padStart(3, '0');
+          
+          eventItem.innerHTML = `
+            <span class="event-time">[${humanTime}]</span>
+            <span class="event-type">${eventData.type}</span>
+            <div class="event-details">${formatEventDetails(eventData.event)}</div>
+          `;
+          eventLog.appendChild(eventItem);
+          
+          currentGroup = {
+            type: eventData.type,
+            item: eventItem
+          };
+        }
+      });
+      
+      eventLog.scrollTop = 0;
+      updateStats();
+    }
+    
+    function exportLog() {
+      // Export all events (newest first)
+      const date = new Date();
+      const logText = events
+        .slice()
+        .reverse() // Reverse to show newest first
+        .map(e => {
+          const eventDate = new Date(e.timestamp);
+          const humanTime = eventDate.toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          }) + '.' + eventDate.getMilliseconds().toString().padStart(3, '0');
+          return `[${humanTime}] ${e.type} - ${formatEventDetails(e.event)}`;
+        }).join('\n');
+      
+      const blob = new Blob([logText], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `js-events-${Date.now()}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    
+    // Initialize filter checkboxes organized by sections
+    function initializeFilterCheckboxes() {
+      const eventSections = [
+        {
+          title: 'Mouse Events',
+          events: ['click', 'dblclick', 'mousedown', 'mouseup', 'mousemove', 'mouseenter', 
+                   'mouseleave', 'mouseover', 'mouseout', 'contextmenu']
+        },
+        {
+          title: 'Touch Events',
+          events: ['touchstart', 'touchend', 'touchmove', 'touchcancel']
+        },
+        {
+          title: 'Keyboard Events',
+          events: ['keydown', 'keyup', 'keypress']
+        },
+        {
+          title: 'Form Events',
+          events: ['input', 'change', 'submit', 'reset', 'focus', 'blur', 'select']
+        },
+        {
+          title: 'Window Events',
+          events: ['load', 'unload', 'beforeunload', 'resize', 'scroll', 'hashchange',
+                   'popstate', 'pageshow', 'pagehide']
+        },
+        {
+          title: 'Media Events',
+          events: ['play', 'pause', 'ended', 'timeupdate', 'volumechange']
+        },
+        {
+          title: 'Drag & Drop',
+          events: ['drag', 'dragstart', 'dragend', 'dragover', 'dragenter', 'dragleave', 'drop']
+        },
+        {
+          title: 'Clipboard',
+          events: ['copy', 'cut', 'paste']
+        },
+        {
+          title: 'Other',
+          events: ['wheel', 'error', 'online', 'offline', 'visibilitychange', 'focusin', 'focusout']
+        }
+      ];
+      
+      eventSections.forEach((section, sectionIndex) => {
+        const sectionEl = document.createElement('div');
+        sectionEl.className = 'filter-section expanded';
+        sectionEl.dataset.sectionIndex = sectionIndex;
+        
+        const header = document.createElement('div');
+        header.className = 'filter-section-header';
+        
+        const headerLeft = document.createElement('div');
+        headerLeft.className = 'filter-section-header-left';
+        
+        const title = document.createElement('h4');
+        title.textContent = section.title;
+        
+        const toggle = document.createElement('span');
+        toggle.className = 'filter-section-toggle';
+        toggle.textContent = '▼';
+        
+        headerLeft.appendChild(title);
+        headerLeft.appendChild(toggle);
+        
+        const sectionActions = document.createElement('div');
+        sectionActions.className = 'filter-section-actions';
+        
+        const enableAllBtn = document.createElement('button');
+        enableAllBtn.className = 'filter-section-action-btn';
+        enableAllBtn.textContent = 'Enable All';
+        enableAllBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          section.events.forEach(eventType => {
+            const checkbox = document.getElementById(`filter-${eventType}`);
+            if (checkbox && !checkbox.checked) {
+              checkbox.checked = true;
+              selectedEventTypes.add(eventType.toLowerCase());
+            }
+          });
+          applyFilter();
+        });
+        
+        const disableAllBtn = document.createElement('button');
+        disableAllBtn.className = 'filter-section-action-btn';
+        disableAllBtn.textContent = 'Disable All';
+        disableAllBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          section.events.forEach(eventType => {
+            const checkbox = document.getElementById(`filter-${eventType}`);
+            if (checkbox && checkbox.checked) {
+              checkbox.checked = false;
+              selectedEventTypes.delete(eventType.toLowerCase());
+            }
+          });
+          applyFilter();
+        });
+        
+        sectionActions.appendChild(enableAllBtn);
+        sectionActions.appendChild(disableAllBtn);
+        
+        header.appendChild(headerLeft);
+        header.appendChild(sectionActions);
+        
+        headerLeft.addEventListener('click', () => {
+          sectionEl.classList.toggle('expanded');
+          toggle.textContent = sectionEl.classList.contains('expanded') ? '▼' : '▶';
+        });
+        
+        const content = document.createElement('div');
+        content.className = 'filter-section-content';
+        
+        section.events.forEach(eventType => {
+          const item = document.createElement('div');
+          item.className = 'filter-checkbox-item';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.id = `filter-${eventType}`;
+          checkbox.value = eventType;
+          checkbox.checked = true; // All selected by default
+          checkbox.addEventListener('change', (e) => {
+            if (e.target.checked) {
+              selectedEventTypes.add(eventType.toLowerCase());
+            } else {
+              selectedEventTypes.delete(eventType.toLowerCase());
+            }
+            applyFilter();
+          });
+          
+          const label = document.createElement('label');
+          label.htmlFor = `filter-${eventType}`;
+          label.textContent = eventType;
+          
+          item.appendChild(checkbox);
+          item.appendChild(label);
+          content.appendChild(item);
+          
+          // Add to selected set by default
+          selectedEventTypes.add(eventType.toLowerCase());
+        });
+        
+        sectionEl.appendChild(header);
+        sectionEl.appendChild(content);
+        filterSections.appendChild(sectionEl);
+      });
+    }
+    
+    function toggleFilterPanel() {
+      filterPanel.classList.toggle('collapsed');
+      filterPanelToggle.textContent = filterPanel.classList.contains('collapsed') ? '▶' : '▼';
+    }
+    
+    function selectAllEvents() {
+      const checkboxes = filterSections.querySelectorAll('input[type="checkbox"]');
+      checkboxes.forEach(cb => {
+        cb.checked = true;
+        selectedEventTypes.add(cb.value.toLowerCase());
+      });
+      applyFilter();
+    }
+    
+    function selectNoneEvents() {
+      const checkboxes = filterSections.querySelectorAll('input[type="checkbox"]');
+      checkboxes.forEach(cb => {
+        cb.checked = false;
+        selectedEventTypes.delete(cb.value.toLowerCase());
+      });
+      applyFilter();
+    }
+    
+    // Event listeners
+    clearBtn.addEventListener('click', clearLog);
+    pauseBtn.addEventListener('click', togglePause);
+    filterPanelHeaderLeft.addEventListener('click', () => {
+      toggleFilterPanel();
+    });
+    selectAllBtn.addEventListener('click', selectAllEvents);
+    selectNoneBtn.addEventListener('click', selectNoneEvents);
+    exportBtn.addEventListener('click', exportLog);
+    
+    // Resize handle functionality
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+    
+    filterResizeHandle.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      startY = e.clientY;
+      startHeight = filterPanel.offsetHeight;
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      const deltaY = e.clientY - startY;
+      const maxHeight = Math.round(window.innerHeight * 0.70); // 70% of viewport height
+      const newHeight = Math.max(200, Math.min(maxHeight, startHeight + deltaY));
+      filterPanel.style.height = `${newHeight}px`;
+      filterPanel.style.maxHeight = 'none';
+      e.preventDefault();
+    });
+    
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    });
+    
+    // Update max height on window resize if panel has been manually resized
+    window.addEventListener('resize', () => {
+      if (filterPanel.style.height && filterPanel.style.height !== '') {
+        const maxHeight = Math.round(window.innerHeight * 0.70);
+        const currentHeight = parseInt(filterPanel.style.height);
+        if (currentHeight > maxHeight) {
+          filterPanel.style.height = `${maxHeight}px`;
+        }
+      }
+    });
+    
+    // Initialize filter checkboxes
+    initializeFilterCheckboxes();
+    
+    // Capture all JavaScript events
+    const eventTypes = [
+      // Mouse events
+      'click', 'dblclick', 'mousedown', 'mouseup', 'mousemove', 'mouseenter', 
+      'mouseleave', 'mouseover', 'mouseout', 'contextmenu',
+      
+      // Touch events
+      'touchstart', 'touchend', 'touchmove', 'touchcancel',
+      
+      // Keyboard events
+      'keydown', 'keyup', 'keypress',
+      
+      // Form events
+      'input', 'change', 'submit', 'reset', 'focus', 'blur', 'select',
+      
+      // Window events
+      'load', 'unload', 'beforeunload', 'resize', 'scroll', 'hashchange',
+      'popstate', 'pageshow', 'pagehide',
+      
+      // Media events
+      'play', 'pause', 'ended', 'timeupdate', 'volumechange',
+      
+      // Drag and drop
+      'drag', 'dragstart', 'dragend', 'dragover', 'dragenter', 'dragleave', 'drop',
+      
+      // Clipboard
+      'copy', 'cut', 'paste',
+      
+      // Other
+      'wheel', 'error', 'online', 'offline', 'visibilitychange', 'focusin', 'focusout'
+    ];
+    
+    // Add event listeners to document (capture phase)
+    eventTypes.forEach(eventType => {
+      try {
+        document.addEventListener(eventType, (e) => {
+          addEvent(e);
+        }, { capture: true, passive: true });
+      } catch (err) {
+        console.warn(`Failed to add listener for ${eventType}:`, err);
+      }
+    });
+    
+    // Add event listeners to window for window-specific events
+    const windowEventTypes = ['resize', 'scroll', 'focus', 'blur', 'hashchange', 'popstate', 
+                              'load', 'unload', 'beforeunload', 'online', 'offline', 'error'];
+    windowEventTypes.forEach(eventType => {
+      try {
+        window.addEventListener(eventType, (e) => {
+          addEvent(e);
+        }, { capture: true, passive: true });
+      } catch (err) {
+        console.warn(`Failed to add window listener for ${eventType}:`, err);
+      }
+    });
+    
+    // Also add to body for better coverage
+    if (document.body) {
+      eventTypes.forEach(eventType => {
+        try {
+          document.body.addEventListener(eventType, (e) => {
+            addEvent(e);
+          }, { capture: true, passive: true });
+        } catch (err) {
+          // Ignore errors for body listeners
+        }
+      });
+    }
+    
+    // Wait for body to be ready if not already
+    if (!document.body) {
+      document.addEventListener('DOMContentLoaded', () => {
+        eventTypes.forEach(eventType => {
+          try {
+            document.body.addEventListener(eventType, (e) => {
+              addEvent(e);
+            }, { capture: true, passive: true });
+          } catch (err) {
+            // Ignore errors
+          }
+        });
+      });
+    }
+    
+    // Initial stats
+    updateStats();
+    
+    // Add welcome message
+    setTimeout(() => {
+      const welcome = document.createElement('div');
+      welcome.className = 'event-item';
+      welcome.style.borderLeftColor = '#4CAF50';
+      const listenerCount = eventTypes.length * 2 + windowEventTypes.length; // document + body + window
+      const now = new Date();
+      const humanTime = now.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }) + '.' + now.getMilliseconds().toString().padStart(3, '0');
+      welcome.innerHTML = `
+        <span class="event-time">[${humanTime}]</span>
+        <span class="event-type">SYSTEM</span>
+        <div class="event-details">Event monitor initialized. ${listenerCount} event listeners registered. All JavaScript events will be logged here. Try clicking, typing, or using the "Test Events" button.</div>
+      `;
+      eventLog.appendChild(welcome);
+      
+      // Log to console for debugging
+      console.log('Event monitor initialized with', listenerCount, 'listeners');
+      console.log('Selected event types:', Array.from(selectedEventTypes));
+    }, 100);
+  </script>
+</body>
+</html>
+
+
